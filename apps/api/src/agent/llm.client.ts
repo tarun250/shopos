@@ -67,13 +67,15 @@ export class LlmClient {
     const settings = await this.prisma.client.systemSetting.findMany().catch(() => []);
     const get = (key: string, fallback = '') => settings.find(s => s.key === key)?.value || fallback;
 
+    // Gemini models have separate free-tier quotas, so several are tried in order (comma-separated setting)
+    const geminiModels = get('agent_model_gemini', 'gemini-3.5-flash,gemini-2.5-flash,gemini-3.1-flash-lite').split(',').map(m => m.trim()).filter(Boolean);
     const all: ProviderConfig[] = [
-      {
+      ...geminiModels.map(model => ({
         name: 'Gemini',
         url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
         apiKey: get('gemini_api_key', process.env.GEMINI_API_KEY || ''),
-        model: get('agent_model_gemini', 'gemini-2.5-flash'),
-      },
+        model,
+      })),
       {
         name: 'Groq',
         url: 'https://api.groq.com/openai/v1/chat/completions',
@@ -113,8 +115,8 @@ export class LlmClient {
         return result;
       } catch (err: any) {
         const message = err?.message || String(err);
-        failures.push(`${provider.name}: ${message.slice(0, 160)}`);
-        this.logger.warn(`Agent LLM provider ${provider.name} failed: ${message.slice(0, 300)}`);
+        failures.push(`${provider.name} (${provider.model}): ${message.slice(0, 160)}`);
+        this.logger.warn(`Agent LLM provider ${provider.name} (${provider.model}) failed: ${message.slice(0, 300)}`);
         if (options.signal?.aborted) throw new Error('Request cancelled');
         if (streamed) options.onReset?.();
       }

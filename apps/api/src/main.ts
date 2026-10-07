@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { CostPriceInterceptor } from './auth/cost-price.interceptor';
@@ -6,7 +7,10 @@ import helmet from 'helmet';
 import * as compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Room for invoice photos sent to the AI assistant (~5 MB as base64)
+  app.useBodyParser('json', { limit: '8mb' });
   
   // Apply Gzip payload compression
   // Server-sent events (AI agent streaming) must not be buffered by compression

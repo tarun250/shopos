@@ -11,8 +11,12 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "paths": {
-      "@shopos/db": ["../../packages/db"],
-      "@shopos/common": ["../../packages/common/src"]
+      "@shopos/db": [
+        "../../packages/db"
+      ],
+      "@shopos/common": [
+        "../../packages/common/src"
+      ]
     },
     "incremental": true,
     "skipLibCheck": true,
@@ -21,5 +25,10 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test"
+  ]
 }

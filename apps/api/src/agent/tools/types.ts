@@ -3,6 +3,9 @@ import { PrismaService } from '../../prisma.service';
 import { BillingService } from '../../billing/billing.service';
 import { ProductsService } from '../../products/products.service';
 import { RagService } from '../rag/rag.service';
+import { SessionService } from '../../session/session.service';
+import { PurchasesService } from '../../purchases/purchases.service';
+import { ReportsService } from '../../reports/reports.service';
 
 export type Role = 'OWNER' | 'MANAGER' | 'CASHIER' | string;
 
@@ -19,6 +22,9 @@ export interface ToolContext {
   billing: BillingService;
   products: ProductsService;
   rag: RagService;
+  sessions: SessionService;
+  purchases: PurchasesService;
+  reports: ReportsService;
 }
 
 export interface ConfirmationPreview {
@@ -30,7 +36,7 @@ export interface ConfirmationPreview {
 }
 
 export interface UiAction {
-  type: 'navigate' | 'open_bill' | 'add_to_cart' | 'set_pos_customer' | 'refresh';
+  type: 'navigate' | 'open_bill' | 'add_to_cart' | 'set_pos_customer' | 'refresh' | 'share_invoice';
   [key: string]: any;
 }
 

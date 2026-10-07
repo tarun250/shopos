@@ -2,6 +2,10 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { PrismaService } from '../prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { ProductsService } from '../products/products.service';
+import { SessionService } from '../session/session.service';
+import { PurchasesService } from '../purchases/purchases.service';
+import { ReportsService } from '../reports/reports.service';
+import { InvoiceVisionService } from './vision';
 import { ChatMessage, LlmClient, ToolCall } from './llm.client';
 import { RagService } from './rag/rag.service';
 import { AgentUser, ToolContext, ToolUserError, UiAction } from './tools/types';
@@ -48,14 +52,23 @@ export class AgentService {
     private readonly rag: RagService,
     private readonly billing: BillingService,
     private readonly products: ProductsService,
+    private readonly sessions: SessionService,
+    private readonly purchases: PurchasesService,
+    private readonly reports: ReportsService,
+    private readonly vision: InvoiceVisionService,
   ) {}
 
   // ==========================================
   // Public entry points
   // ==========================================
 
-  async chat(user: AgentUser, input: { message: string; conversationId?: string; page?: string }, emit: Emit, signal: AbortSignal) {
-    const conversation = await this.getOrCreateConversation(user, input.conversationId, input.message);
+  async chat(
+    user: AgentUser,
+    input: { message: string; conversationId?: string; page?: string; attachment?: { mimeType: string; data: string }; evalRun?: boolean },
+    emit: Emit,
+    signal: AbortSignal,
+  ) {
+    const conversation = await this.getOrCreateConversation(user, input.conversationId, input.evalRun ? `[eval] ${input.message}` : input.message);
     emit('conversation', { id: conversation.id, title: conversation.title });
 
     // Anything left unconfirmed is superseded by a new message
@@ -70,6 +83,25 @@ export class AgentService {
       emit('message', { id: saved.id, content: refusal, citations: [] });
       emit('done', {});
       return;
+    }
+
+    if (input.attachment) {
+      // Read the photo now; the model sees the extraction as untrusted data, never the raw image
+      emit('tool', { id: 'attachment', name: 'read_invoice_image', label: 'Reading invoice photo', status: 'running' });
+      let note: string;
+      try {
+        const extracted = await this.vision.extract(input.attachment.data, input.attachment.mimeType);
+        note = `Supplier invoice read from the attached photo (OCR, may contain mistakes): ${JSON.stringify(extracted)}`;
+        emit('tool', { id: 'attachment', name: 'read_invoice_image', label: 'Reading invoice photo', status: 'done' });
+      } catch (err: any) {
+        note = `The attached image could not be read: ${this.errorMessage(err)}`;
+        emit('tool', { id: 'attachment', name: 'read_invoice_image', label: 'Reading invoice photo', status: 'error' });
+      }
+      await this.saveMessage(conversation.id, {
+        role: 'user',
+        toolName: 'attachment',
+        content: `${fenceUntrusted('attachment', note)}\nIf the user wants this recorded, propose create_purchase_order with receiveNow=true using the matched products and the supplier. Point out unmatched or low-confidence lines and ask about them instead of guessing.`,
+      });
     }
 
     await this.runLoop(user, conversation.id, input.page, emit, signal);
@@ -153,7 +185,7 @@ export class AgentService {
     if (!conversation || conversation.userId !== user.userId) throw new NotFoundException('Conversation not found');
     const items = [
       ...conversation.messages
-        .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.toolCalls && m.content))
+        .filter(m => (m.role === 'user' && m.toolName !== 'attachment') || (m.role === 'assistant' && !m.toolCalls && m.content))
         .map(m => ({
           kind: 'message' as const,
           id: m.id,
@@ -464,7 +496,10 @@ Style: be brief and practical. Use ₹ with Indian number formatting. Use short 
   }
 
   private toolContext(user: AgentUser, conversationId: string): ToolContext {
-    return { user, conversationId, prisma: this.prisma, billing: this.billing, products: this.products, rag: this.rag };
+    return {
+      user, conversationId, prisma: this.prisma, billing: this.billing, products: this.products, rag: this.rag,
+      sessions: this.sessions, purchases: this.purchases, reports: this.reports,
+    };
   }
 
   private errorMessage(err: any): string {

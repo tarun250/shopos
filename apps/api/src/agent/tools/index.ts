@@ -2,9 +2,10 @@ import { AgentTool, Role, toJsonSchema } from './types';
 import { READ_TOOLS } from './read.tools';
 import { WRITE_TOOLS } from './write.tools';
 import { UI_TOOLS } from './ui.tools';
+import { OPS_READ_TOOLS, OPS_UI_TOOLS, OPS_WRITE_TOOLS } from './ops.tools';
 import { ToolSchema } from '../llm.client';
 
-export const ALL_TOOLS: AgentTool[] = [...READ_TOOLS, ...WRITE_TOOLS, ...UI_TOOLS];
+export const ALL_TOOLS: AgentTool[] = [...READ_TOOLS, ...OPS_READ_TOOLS, ...WRITE_TOOLS, ...OPS_WRITE_TOOLS, ...UI_TOOLS, ...OPS_UI_TOOLS];
 const BY_NAME = new Map(ALL_TOOLS.map(t => [t.name, t]));
 
 export const getTool = (name: string) => BY_NAME.get(name);
@@ -27,6 +28,10 @@ const GROUP_PATTERNS: Record<string, RegExp> = {
   cash: /\b(cash|drawer|session|deposit|withdraw\w*|float|shift)\b/i,
   report: /\b(report|summary|summari[sz]e|revenue|profit|margin|how (did|are|is|was)|today|yesterday|week|month|best|top|trend|performance|compare)\b/i,
   knowledge: /\b(polic(y|ies)|how (do|to|can)|rules?|allowed|can i|procedure|guide|gst|terms|explain|what is|why)\b/i,
+  purchase: /\b(purchases?|po|purchase orders?|reorder|restock|order (from|more)|receiv\w*|delivery|delivered|arrived|supplier (bill|invoice)|goods in|stock in)\b/i,
+  session: /\b(open|close|start|end)\b.{0,15}\b(day|shop|shift|session|counter)\b|\bday end\b|\bcash count\b/i,
+  share: /\b(whatsapp|print|send|share|receipt|invoice copy)\b/i,
+  gst: /\b(gst|gstr|tax (return|payable|liability)|input (tax )?credit|itc|hsn)\b/i,
 };
 
 export function selectTools(role: Role, recentUserText: string, recentlyUsed: string[]): AgentTool[] {

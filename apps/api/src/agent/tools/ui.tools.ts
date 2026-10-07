@@ -5,18 +5,19 @@ import { resolveBill, resolveCustomer, resolveProduct } from './resolvers';
 // These tools act on the user's screen (navigation, POS cart). They change no stored data,
 // so they run without confirmation; the browser carries them out.
 
-export const PAGES = ['pos', 'inventory', 'order-history', 'customer-ledgers', 'supplier-ledgers', 'returns', 'approvals', 'knowledge-base', 'settings'] as const;
+export const PAGES = ['pos', 'inventory', 'order-history', 'purchases', 'reports', 'users', 'customer-ledgers', 'supplier-ledgers', 'returns', 'approvals', 'knowledge-base', 'settings'] as const;
 
 export const navigate: UiTool = {
   name: 'navigate',
   kind: 'ui',
   groups: ['core'],
-  description: 'Open a page of the app: pos (billing), inventory (products & stock), order-history, customer-ledgers, supplier-ledgers, returns, approvals, knowledge-base, settings (AI settings, owner only).',
+  description: 'Open a page of the app: pos (billing), inventory (products & stock), order-history, purchases (purchase orders, owner/manager), reports (owner/manager), users (owner), customer-ledgers, supplier-ledgers, returns, approvals, knowledge-base, settings (AI settings, owner only).',
   schema: z.object({ page: z.enum(PAGES) }),
   async execute(args, ctx) {
     if (args.page === 'approvals' && ctx.user.role === 'CASHIER') throw new ToolUserError('Cashiers cannot open the Approval Center.');
     if (args.page === 'settings' && ctx.user.role !== 'OWNER') throw new ToolUserError('Only the owner can open AI settings.');
-    if (args.page === 'knowledge-base' && ctx.user.role === 'CASHIER') throw new ToolUserError('Cashiers cannot manage the knowledge base.');
+    if (['knowledge-base', 'purchases', 'reports'].includes(args.page) && ctx.user.role === 'CASHIER') throw new ToolUserError(`Cashiers cannot open ${args.page}.`);
+    if (args.page === 'users' && ctx.user.role !== 'OWNER') throw new ToolUserError('Only the owner can manage users.');
     return { result: { opened: args.page }, uiAction: { type: 'navigate', page: args.page } };
   },
 };

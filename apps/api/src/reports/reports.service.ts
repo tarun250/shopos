@@ -5,9 +5,15 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DAY_MS = 86400000;
 
+// "YYYY-MM-DD" is read as a local calendar date (new Date("2026-10-08") would be UTC midnight)
+const parseDay = (s: string) => {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s);
+};
+
 function parseRange(from?: string, to?: string) {
-  const end = to ? new Date(to) : new Date();
-  const start = from ? new Date(from) : new Date(end.getTime() - 29 * DAY_MS);
+  const end = to ? parseDay(to) : new Date();
+  const start = from ? parseDay(from) : new Date(end.getTime() - 29 * DAY_MS);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) throw new BadRequestException('from/to must be valid dates (YYYY-MM-DD)');
   start.setHours(0, 0, 0, 0);
   end.setHours(23, 59, 59, 999);

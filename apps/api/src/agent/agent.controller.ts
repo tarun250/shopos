@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -9,6 +10,18 @@ import { AgentService, Emit } from './agent.service';
 import { RagService } from './rag/rag.service';
 import { AgentUser } from './tools/types';
 import { PAGES } from './tools/ui.tools';
+import { ALLOWED_IMAGE_TYPES } from './vision';
+import { BriefService } from './brief.service';
+import { QualityService } from './quality.service';
+
+export class AttachmentDto {
+  @IsIn([...ALLOWED_IMAGE_TYPES])
+  mimeType: string;
+
+  @IsString()
+  @MaxLength(7_200_000) // ~5 MB image as base64
+  data: string;
+}
 
 export class AgentChatDto {
   @IsString()
@@ -24,6 +37,11 @@ export class AgentChatDto {
   @IsOptional()
   @IsIn([...PAGES])
   page?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AttachmentDto)
+  attachment?: AttachmentDto;
 }
 
 export class FeedbackDto {
@@ -62,7 +80,12 @@ const agentUser = (req: Request): AgentUser => {
 @Controller('agent')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AgentController {
-  constructor(private readonly agent: AgentService, private readonly rag: RagService) {}
+  constructor(
+    private readonly agent: AgentService,
+    private readonly rag: RagService,
+    private readonly brief: BriefService,
+    private readonly quality: QualityService,
+  ) {}
 
   /** Server-sent events: conversation, token, reset, tool, ui, confirmation, action, message, done, error. */
   private openStream(req: Request, res: Response): { emit: Emit; signal: AbortSignal; end: () => void } {
@@ -135,6 +158,39 @@ export class AgentController {
   @Post('messages/:id/feedback')
   feedback(@Req() req: Request, @Param('id') id: string, @Body() body: FeedbackDto) {
     return this.agent.setFeedback(agentUser(req), id, body.value);
+  }
+
+  @Get('brief')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  getBrief(@Req() req: Request, @Query('refresh') refresh?: string) {
+    return this.brief.get(agentUser(req), refresh === 'true');
+  }
+
+  // ---------- Quality: dashboard and evaluation runs (owner) ----------
+
+  @Get('quality')
+  @Roles('OWNER')
+  qualityOverview(@Query('days') days?: string) {
+    return this.quality.overview(Math.min(Math.max(Number(days) || 14, 1), 90));
+  }
+
+  @Get('evals')
+  @Roles('OWNER')
+  listEvals() {
+    return this.quality.listRuns();
+  }
+
+  @Get('evals/:id')
+  @Roles('OWNER')
+  getEval(@Param('id') id: string) {
+    return this.quality.getRun(id);
+  }
+
+  @Post('evals')
+  @Roles('OWNER')
+  @Throttle({ default: { limit: 2, ttl: 600000 } })
+  startEval(@Req() req: Request) {
+    return this.quality.startRun(agentUser(req));
   }
 
   // ---------- Knowledge base administration ----------
