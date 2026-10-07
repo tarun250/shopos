@@ -15,6 +15,10 @@ import {
   ShoppingCart,
   Sparkles,
   type LucideIcon,
+  Truck,
+  BarChart3,
+  Users,
+  Gauge,
 } from 'lucide-react';
 import type { ActiveUser, TabId } from '../types';
 
@@ -33,7 +37,11 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'pos', label: 'POS Billing', icon: ShoppingCart },
   { id: 'inventory', label: 'Products & Stock', icon: Package },
   { id: 'order-history', label: 'Order History', icon: History },
+  { id: 'purchases', label: 'Purchases', icon: Truck, roles: ['OWNER', 'MANAGER'] },
+  { id: 'reports', label: 'Reports & GST', icon: BarChart3, roles: ['OWNER', 'MANAGER'] },
   { id: 'knowledge-base', label: 'AI Knowledge Base', icon: Sparkles, roles: ['OWNER', 'MANAGER'] },
+  { id: 'ai-quality', label: 'AI Quality', icon: Gauge, roles: ['OWNER'] },
+  { id: 'users', label: 'Users & Shop', icon: Users, roles: ['OWNER'] },
   { id: 'customer-ledgers', label: 'Customer Ledgers', icon: BookOpen },
   { id: 'supplier-ledgers', label: 'Supplier Ledgers', icon: Database },
   { id: 'returns', label: 'Return Center', icon: RotateCcw },

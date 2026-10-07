@@ -16,6 +16,10 @@ import ApprovalsTab from './components/tabs/ApprovalsTab';
 import CustomerLedgersTab from './components/tabs/CustomerLedgersTab';
 import SupplierLedgersTab from './components/tabs/SupplierLedgersTab';
 import ReturnsTab from './components/tabs/ReturnsTab';
+import PurchasesTab from './components/tabs/PurchasesTab';
+import ReportsTab from './components/tabs/ReportsTab';
+import UsersTab from './components/tabs/UsersTab';
+import AiQualityTab from './components/tabs/AiQualityTab';
 import { CheckoutSuccessModal, LossWarningModal, LossWarningState, PendingApprovalOverlay } from './components/modals/CheckoutModals';
 import LedgerDrawer from './components/modals/LedgerDrawer';
 import CommandPalette from './components/modals/CommandPalette';
@@ -1236,6 +1240,11 @@ export default function ShopOSApp() {
                 handleSaveAiSettingsSubmit={handleSaveAiSettingsSubmit}
               />
             )}
+
+            {activeTab === 'purchases' && <PurchasesTab key="purchases" />}
+            {activeTab === 'reports' && <ReportsTab key="reports" />}
+            {activeTab === 'users' && <UsersTab key="users" />}
+            {activeTab === 'ai-quality' && <AiQualityTab key="ai-quality" />}
 
             {activeTab === 'knowledge-base' && user && (
               <TabPane key="knowledge-base" className="flex-1 flex flex-col overflow-hidden h-full">
