@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AgentService } from './agent.service';
 import { EVAL_CASES, EvalObservation, scoreCase } from './evals';
@@ -7,11 +7,20 @@ import { AgentUser } from './tools/types';
 const DELAY_BETWEEN_CASES_MS = 4000; // stay under free-tier per-minute limits
 
 @Injectable()
-export class QualityService {
+export class QualityService implements OnModuleInit {
   private readonly logger = new Logger(QualityService.name);
   private running = false;
 
   constructor(private readonly prisma: PrismaService, private readonly agent: AgentService) {}
+
+  /** Runs live in memory, so any run still marked RUNNING at startup was cut off by a restart. */
+  async onModuleInit() {
+    const stale = await this.prisma.client.agentEvalRun.updateMany({
+      where: { status: 'RUNNING' },
+      data: { status: 'INTERRUPTED', finishedAt: new Date() },
+    }).catch(() => ({ count: 0 }));
+    if (stale.count) this.logger.warn(`Marked ${stale.count} evaluation run(s) interrupted by a restart`);
+  }
 
   /** Owner dashboard: feedback, action outcomes, blocked inputs and provider usage over the last N days. */
   async overview(days = 14) {
