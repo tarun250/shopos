@@ -8,6 +8,10 @@ import { SessionModule } from './session/session.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { AgentModule } from './agent/agent.module';
+import { PurchasesModule } from './purchases/purchases.module';
+import { ReportsModule } from './reports/reports.module';
+import { UsersModule } from './users/users.module';
+import { ShopSettingsModule } from './settings/shop-settings';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { HealthController } from './health.controller';
@@ -23,6 +27,10 @@ import { HealthController } from './health.controller';
     ExpensesModule,
     RemindersModule,
     AgentModule,
+    PurchasesModule,
+    ReportsModule,
+    UsersModule,
+    ShopSettingsModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,

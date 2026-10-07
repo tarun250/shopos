@@ -116,7 +116,7 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!session || session.isRevoked || new Date() > session.expiresAt) {
+    if (!session || session.isRevoked || new Date() > session.expiresAt || !session.user.isActive) {
       if (session) {
         await this.prisma.client.userSession.updateMany({
           where: { userId: session.userId },

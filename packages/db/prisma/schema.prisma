@@ -307,6 +307,8 @@ model Bill {
   isQuote        Boolean          @default(false)
   userId         String
   status         String           @default("FINALIZED") // "FINALIZED", "PENDING_APPROVAL", "REJECTED", "DRAFT"
+  clientRef      String?          @unique // idempotency key for bills created offline and synced later
+  offlineCreatedAt DateTime? // when an offline bill was actually made at the counter
   createdAt      DateTime         @default(now())
   items          BillItem[]
   payments       PaymentSplit[]
@@ -357,8 +359,14 @@ model PurchaseOrder {
   netAmount       Float
   paidAmount      Float            @default(0.0)
   balanceAmount   Float            @default(0.0)
-  status          String           @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  status          String           @default("ORDERED") // "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"
+  supplierInvoiceNumber String?
+  expectedDate    DateTime?
+  receivedAt      DateTime?
+  notes           String?
+  createdBy       String?
   createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
   items           PurchaseItem[]
   supplierLedger  SupplierLedger[]
   purchaseReturns PurchaseReturn[]
@@ -369,6 +377,7 @@ model PurchaseItem {
   purchaseOrderId String
   productId       String
   quantity        Float
+  receivedQuantity Float        @default(0.0)
   costPrice       Float
   cgstRate        Float         @default(0.0)
   cgstAmount      Float         @default(0.0)
@@ -695,4 +704,15 @@ model KnowledgeChunk {
   createdAt      DateTime          @default(now())
 
   @@index([documentId])
+}
+
+model AgentEvalRun {
+  id         String    @id @default(uuid())
+  startedBy  String
+  status     String    @default("RUNNING") // "RUNNING", "COMPLETED", "FAILED"
+  total      Int       @default(0)
+  passed     Int       @default(0)
+  results    String    @default("[]") // JSON array of per-case results
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
 }

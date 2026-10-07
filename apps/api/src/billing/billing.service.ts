@@ -54,7 +54,14 @@ export class BillingService {
       transactionRef?: string;
     }>;
     approvedByManagerId?: string; // provided if overridden by manager PIN
+    clientRef?: string; // idempotency key from the offline queue
+    offlineCreatedAt?: string;
   }, userId: string) {
+    // A retried offline sync must not create the same bill twice
+    if (data.clientRef) {
+      const existing = await this.prisma.client.bill.findUnique({ where: { clientRef: data.clientRef } });
+      if (existing) return { ...existing, duplicate: true };
+    }
     return this.prisma.client.$transaction(async (tx) => {
       // 1. Fetch products and customer
       const productIds = data.items.map(i => i.productId);
@@ -183,6 +190,8 @@ export class BillingService {
           paymentMethod: data.paymentMethod,
           isQuote: data.isQuote,
           userId,
+          clientRef: data.clientRef || null,
+          offlineCreatedAt: data.offlineCreatedAt && !isNaN(Date.parse(data.offlineCreatedAt)) ? new Date(data.offlineCreatedAt) : null,
           status: needsApproval ? 'PENDING_APPROVAL' : 'FINALIZED',
           items: {
             create: billingItems,

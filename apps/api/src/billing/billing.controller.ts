@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, HttpStatus, HttpCode, UseGuards, Req, ForbiddenException, Query } from '@nestjs/common';
 import { BillingService } from './billing.service';
+import { ShopSettingsService } from '../settings/shop-settings';
+import { amountInWords, hsnSummary, whatsappText } from './invoice';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -93,6 +95,14 @@ export class CreateBillDataDto {
   @IsString()
   @IsOptional()
   approvedByManagerId?: string;
+
+  @IsString()
+  @IsOptional()
+  clientRef?: string;
+
+  @IsString()
+  @IsOptional()
+  offlineCreatedAt?: string;
 }
 
 export class CreateBillDto {
@@ -180,7 +190,7 @@ export class RecordPaymentDto {
 @Controller('billing')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(private readonly billingService: BillingService, private readonly shopSettings: ShopSettingsService) {}
 
   @Get('customers')
   async getCustomers() {
@@ -231,6 +241,23 @@ export class BillingController {
   @Get('bills/:id')
   async getBillDetail(@Param('id') id: string) {
     return this.billingService.getBillDetail(id);
+  }
+
+  /** Everything needed to print a GST invoice / thermal receipt or share it on WhatsApp. */
+  @Get('bills/:id/invoice')
+  async getInvoice(@Param('id') id: string) {
+    const [bill, shop] = await Promise.all([this.billingService.getBillDetail(id), this.shopSettings.get()]);
+    const phone = bill.customer?.phone && bill.customer.phone !== '0000000000' ? bill.customer.phone : null;
+    return {
+      shop,
+      bill,
+      amountInWords: amountInWords(bill.netAmount),
+      hsnSummary: hsnSummary(bill.items as any),
+      whatsapp: { phone: phone ? `91${phone}` : null, text: whatsappText(shop.name, bill as any) },
+      upiLink: shop.upiId && bill.balanceAmount > 0 && !bill.isQuote
+        ? `upi://pay?pa=${encodeURIComponent(shop.upiId)}&pn=${encodeURIComponent(shop.name)}&am=${bill.balanceAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(bill.billNumber)}`
+        : null,
+    };
   }
 
   @Get('approvals')
