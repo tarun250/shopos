@@ -1,0 +1,276 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+  }
+}
+
+@theme {
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+* {
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* Custom Scrollbar for Stripe/Linear styling density */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.15);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.25);
+}
+
+/* Glassmorphism effects */
+.glass-panel {
+  background: rgba(13, 13, 13, 0.65);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.light .glass-panel {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Pulse Animation for offline indicators */
+@keyframes sync-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.97);
+  }
+}
+
+.sync-anim {
+  animation: sync-pulse 2s infinite ease-in-out;
+}
+
+/* Skeleton loader animations */
+@keyframes pulse-skeleton {
+  0%, 100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.skeleton-pulse {
+  animation: pulse-skeleton 1.8s infinite ease-in-out;
+}
+
+/* Compact mode overrides to support high data-density lists for cashiers */
+.compact-mode .p-6,
+.compact-mode .p-5,
+.compact-mode .p-4,
+.compact-mode .p-3 {
+  padding: 0.45rem !important;
+}
+
+.compact-mode .px-6,
+.compact-mode .px-4 {
+  padding-left: 0.6rem !important;
+  padding-right: 0.6rem !important;
+}
+
+.compact-mode .py-6,
+.compact-mode .py-4,
+.compact-mode .py-3 {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+.compact-mode .mb-6,
+.compact-mode .mb-4 {
+  margin-bottom: 0.5rem !important;
+}
+
+.compact-mode .gap-6,
+.compact-mode .gap-4 {
+  gap: 0.5rem !important;
+}
+
+.compact-mode tr td,
+.compact-mode tr th {
+  padding: 0.35rem 0.5rem !important;
+}
+
+.compact-mode text-sm {
+  font-size: 0.75rem !important;
+}
+
+.compact-mode text-xs {
+  font-size: 0.7rem !important;
+}
+
+.compact-mode h2 {
+  font-size: 1rem !important;
+  line-height: 1.2rem !important;
+}
+
+/* Light mode theme mappings */
+.light main,
+.light .theme-bg-main {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+
+.light aside {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+  color: #374151 !important;
+}
+
+.light div, 
+.light section, 
+.light aside, 
+.light tr, 
+.light th, 
+.light td {
+  border-color: #e5e7eb !important;
+}
+
+.light table {
+  color: #374151 !important;
+}
+
+.light th {
+  background-color: #f3f4f6 !important;
+  color: #4b5563 !important;
+}
+
+.light select,
+.light input,
+.light textarea {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+  color: #111827 !important;
+}
+
+.light select:focus,
+.light input:focus {
+  border-color: #6366f1 !important;
+}
+
+.light .bg-neutral-900,
+.light .bg-neutral-900\/35,
+.light .bg-neutral-950\/30,
+.light .bg-neutral-950\/40,
+.light .bg-neutral-950\/20 {
+  background-color: #ffffff !important;
+}
+
+.light .hover\:bg-neutral-800\/60:hover,
+.light .hover\:bg-neutral-900\/20:hover {
+  background-color: #f3f4f6 !important;
+}
+
+.light .text-white {
+  color: #111827 !important;
+}
+
+.light .text-neutral-400 {
+  color: #6b7280 !important;
+}
+
+.light .text-neutral-300 {
+  color: #374151 !important;
+}
+
+.light .text-neutral-200 {
+  color: #1f2937 !important;
+}
+
+.light .text-neutral-550,
+.light .text-neutral-500 {
+  color: #9ca3af !important;
+}
+
+.light .border-neutral-800,
+.light .border-neutral-850,
+.light .border-neutral-800\/80,
+.light .border-neutral-800\/50,
+.light .border-neutral-700 {
+  border-color: #e5e7eb !important;
+}
+
+.light .bg-neutral-850 {
+  background-color: #e5e7eb !important;
+}
+
+.light .bg-neutral-800 {
+  background-color: #f3f4f6 !important;
+  color: #374151 !important;
+  border-color: #d1d5db !important;
+}
+.light .hover\:bg-neutral-750:hover,
+.light .hover\:bg-neutral-700:hover {
+  background-color: #e5e7eb !important;
+}

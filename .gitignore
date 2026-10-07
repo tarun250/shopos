@@ -1,0 +1,21 @@
+# Dependencies and build output
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Local database (contains business data and AI API keys) and its backups
+*.db
+*.db-journal
+*.db.backup*
+
+# Secrets and local config
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
