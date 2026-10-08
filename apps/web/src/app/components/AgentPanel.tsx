@@ -241,14 +241,21 @@ export default function AgentPanel({ open, onClose, apiBase, secureFetch, user, 
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [items, draft, steps]);
 
+  // The listener must stay attached for the whole keypress: if it depended on busy/onClose, a state
+  // update made by an earlier keydown listener would re-run this effect mid-dispatch and the browser
+  // would skip the removed listener. So read the latest values through refs instead.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
+      if (e.key === 'Escape' && !busyRef.current) onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, busy, onClose]);
+  }, [open]);
 
   const updateAction = (id: string, patch: Partial<ActionItem>) =>
     setItems(prev => prev.map(it => (it.kind === 'action' && it.id === id ? { ...it, ...patch } : it)));
