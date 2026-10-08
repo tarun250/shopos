@@ -715,7 +715,9 @@ export default function ShopOSApp() {
       // 3. F2 - Quick Pay / Complete Checkout
       if (e.key === 'F2' && activeTab === 'pos' && cart.length > 0) {
         e.preventDefault();
-        handlePOSCheckout();
+        // Through a ref: this listener is only re-created when the cart changes, so it must not
+        // capture a stale paidAmount / payment method / discount
+        checkoutRef.current();
       }
 
       // 4. F4 - Toggle Quote Mode
@@ -1114,6 +1116,8 @@ export default function ShopOSApp() {
 
     executeCheckout();
   };
+  const checkoutRef = useRef(handlePOSCheckout);
+  checkoutRef.current = handlePOSCheckout;
 
   const executeCheckout = async (approvedByManagerId?: string, bypassLossWarning?: boolean) => {
     const offline = backendStatus === 'offline';
