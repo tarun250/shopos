@@ -1192,7 +1192,7 @@ export default function ShopOSApp() {
 
     const requiresApproval = cart.some(item => (item.unitPrice - item.discount) < item.product.level3Price) && !approvedByManagerId && user?.role !== 'OWNER';
 
-    let optimisticInvoice = `BILL-${Date.now().toString().slice(-6)}`;
+    const optimisticInvoice = `BILL-${Date.now().toString().slice(-6)}`;
     const savedCart = [...cart];
     const savedCustomer = selectedCustomer;
     const savedDiscount = overallDiscount;
