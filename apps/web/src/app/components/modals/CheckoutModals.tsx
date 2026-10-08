@@ -1,5 +1,8 @@
 'use client';
 
+import { useShop } from '../../ShopContext';
+import { openInvoice, openWhatsAppForBill } from '../../lib/share';
+
 // Overlays driven by the POS checkout flow in page.tsx (approval wait, loss warning, success receipt)
 
 import React from 'react';
@@ -36,7 +39,7 @@ export function PendingApprovalOverlay({
     <AnimatePresence>
       {pendingBillId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -132,7 +135,7 @@ export function LossWarningModal({ lossWarningModal, setLossWarningModal }: Loss
     <AnimatePresence>
       {lossWarningModal?.show && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -172,13 +175,13 @@ export function LossWarningModal({ lossWarningModal, setLossWarningModal }: Loss
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-2">
-              <button 
+              <button
                 onClick={() => setLossWarningModal(null)}
                 className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs py-2 rounded-lg cursor-pointer transition-colors"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={lossWarningModal.bypassAction}
                 className="bg-red-600 hover:bg-red-555 text-white text-xs font-semibold py-2 rounded-lg cursor-pointer transition-colors"
               >
@@ -200,11 +203,12 @@ interface CheckoutSuccessModalProps {
 
 // OVERLAY B: Checkout Success Modal
 export function CheckoutSuccessModal({ checkoutResult, setCheckoutResult, clearCart }: CheckoutSuccessModalProps) {
+  const { API_BASE, secureFetch } = useShop();
   return (
     <AnimatePresence>
       {checkoutResult && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 15 }}
@@ -219,6 +223,9 @@ export function CheckoutSuccessModal({ checkoutResult, setCheckoutResult, clearC
                   {checkoutResult.isQuote ? 'Quotation Saved' : 'Transaction Success'}
                 </h3>
                 <p className="text-xs text-neutral-500 font-mono mt-1">{checkoutResult.billNumber}</p>
+                {checkoutResult.offline && (
+                  <p className="text-[11px] text-amber-300 mt-2">Saved on this device. It will be sent to the server automatically when the connection is back.</p>
+                )}
               </div>
 
               <div className="bg-neutral-950/60 p-4 rounded-xl border border-neutral-850 space-y-2 text-sm text-left">
@@ -236,7 +243,22 @@ export function CheckoutSuccessModal({ checkoutResult, setCheckoutResult, clearC
                 </div>
               </div>
 
-              <button 
+              {checkoutResult.id && (
+                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <button onClick={() => openInvoice(checkoutResult.id, 'receipt')} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 py-2 rounded-lg cursor-pointer">Receipt</button>
+                  <button onClick={() => openInvoice(checkoutResult.id, 'a4')} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 py-2 rounded-lg cursor-pointer">A4 invoice</button>
+                  <button
+                    disabled={!checkoutResult.customerPhone}
+                    title={checkoutResult.customerPhone ? 'Send on WhatsApp' : 'No customer phone on this bill'}
+                    onClick={() => openWhatsAppForBill(API_BASE, secureFetch, checkoutResult.id)}
+                    className="bg-green-900/60 hover:bg-green-800 disabled:opacity-40 text-green-200 py-2 rounded-lg cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    WhatsApp
+                  </button>
+                </div>
+              )}
+
+              <button
                 onClick={() => {
                   setCheckoutResult(null);
                   clearCart();

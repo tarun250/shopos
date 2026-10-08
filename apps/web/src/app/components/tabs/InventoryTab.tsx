@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Tag } from 'lucide-react';
 import TabPane from './TabPane';
 import { EditProductModal, RecycleBinModal, StockAdjustmentModal } from '../modals/InventoryModals';
 import ProductWizardModal from '../modals/ProductWizardModal';
@@ -90,6 +90,13 @@ export default function InventoryTab({
 
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+  // Barcode label printing
+  const [labelIds, setLabelIds] = useState<string[]>([]);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [labelCopies, setLabelCopies] = useState(1);
+  const [labelSize, setLabelSize] = useState<'sheet' | 'thermal'>('sheet');
+  const toggleLabel = (id: string) => setLabelIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  const allOnPageSelected = products.length > 0 && products.every(p => labelIds.includes(p.id));
 
   const triggerEditProduct = (p: Product) => {
     const retail = p.priceLevels.find(pl => pl.level === 'RETAIL')?.price || 0;
@@ -144,6 +151,15 @@ export default function InventoryTab({
         <div className="flex items-center gap-3">
           <button
             type="button"
+            onClick={() => setShowLabelModal(true)}
+            disabled={labelIds.length === 0}
+            title={labelIds.length ? 'Print barcode labels for the selected products' : 'Tick products to print barcode labels'}
+            className="bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed text-neutral-300 text-xs font-semibold px-3 py-1.5 rounded-lg border border-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <Tag className="w-3.5 h-3.5" /> Print labels{labelIds.length ? ` (${labelIds.length})` : ''}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowRecycleBin(true)}
             className="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs font-semibold px-3 py-1.5 rounded-lg border border-neutral-800 transition-colors cursor-pointer"
           >
@@ -160,7 +176,7 @@ export default function InventoryTab({
           ) : null}
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2.5 text-neutral-500 w-3.5 h-3.5" />
-            <input 
+            <input
               type="text"
               placeholder="Search SKU or name..."
               value={catalogSearch}
@@ -176,6 +192,15 @@ export default function InventoryTab({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-neutral-800 text-[10px] font-bold text-neutral-400 uppercase tracking-wider bg-neutral-950/20">
+              <th className="p-3 w-8">
+                <input
+                  type="checkbox"
+                  aria-label="Select all products on this page for labels"
+                  checked={allOnPageSelected}
+                  onChange={() => setLabelIds(prev => (allOnPageSelected ? prev.filter(id => !products.some(p => p.id === id)) : [...new Set([...prev, ...products.map(p => p.id)])]))}
+                  className="accent-violet-500 cursor-pointer"
+                />
+              </th>
               <th className="p-3">Product Name & SKU</th>
               <th className="p-3 text-center">Base Unit</th>
               {user?.role === 'OWNER' || user?.role === 'MANAGER' ? (
@@ -198,6 +223,9 @@ export default function InventoryTab({
 
               return (
                 <tr key={p.id} className="hover:bg-neutral-900/20 transition-colors">
+                  <td className="p-3 w-8">
+                    <input type="checkbox" aria-label={`Select ${p.name} for labels`} checked={labelIds.includes(p.id)} onChange={() => toggleLabel(p.id)} className="accent-violet-500 cursor-pointer" />
+                  </td>
                   <td className="p-3">
                     <p className="font-semibold text-white">{p.name}</p>
                     <span className="text-[10px] text-neutral-500 font-mono block mt-0.5">{p.sku}</span>
@@ -227,7 +255,7 @@ export default function InventoryTab({
                   </td>
                   <td className="p-3 text-center">
                     <div className="flex justify-center gap-1.5">
-                      <button 
+                      <button
                         onClick={() => setStockAdjustment({
                           show: true,
                           product: p,
@@ -241,13 +269,13 @@ export default function InventoryTab({
                       </button>
                       {isElevated && (
                         <>
-                          <button 
+                          <button
                             onClick={() => triggerEditProduct(p)}
                             className="bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-500/30 text-[10px] px-2.5 py-1 rounded-md transition-colors cursor-pointer font-semibold"
                           >
                             Edit
                           </button>
-                          <button 
+                          <button
                             onClick={() => deleteProduct(p.id)}
                             className="bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-900/30 text-[10px] px-2.5 py-1 rounded-md transition-colors cursor-pointer font-semibold"
                           >
@@ -270,14 +298,14 @@ export default function InventoryTab({
           Page Depth: <span className="text-white font-semibold font-mono">{catalogCursorHistory.length + 1}</span>
         </span>
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={handleCatalogPrevPage}
             disabled={catalogCursorHistory.length === 0}
             className="bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer"
           >
             Previous Page
           </button>
-          <button 
+          <button
             onClick={handleCatalogNextPage}
             disabled={!hasMoreCatalog}
             className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer"
@@ -312,6 +340,37 @@ export default function InventoryTab({
         units={units}
         suppliers={suppliers}
       />
+
+      {/* Barcode label options */}
+      {showLabelModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowLabelModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-white">Print barcode labels</h3>
+            <p className="text-xs text-neutral-400">{labelIds.length} product{labelIds.length === 1 ? '' : 's'} selected. Products without a barcode get their SKU as the barcode.</p>
+            <label className="block text-xs text-neutral-400">
+              Copies of each
+              <input type="number" min={1} max={200} value={labelCopies} onChange={e => setLabelCopies(Math.min(200, Math.max(1, Number(e.target.value) || 1)))} className="mt-1 w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white focus:outline-none" />
+            </label>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {([['sheet', 'A4 sheet (3 × 8)'], ['thermal', 'Thermal 50 × 25 mm']] as const).map(([value, label]) => (
+                <button key={value} onClick={() => setLabelSize(value)} className={`py-2 rounded-lg border cursor-pointer ${labelSize === value ? 'bg-white text-neutral-950 border-white' : 'bg-neutral-950 border-neutral-800 text-neutral-300'}`}>{label}</button>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowLabelModal(false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold py-2 rounded-lg cursor-pointer">Cancel</button>
+              <button
+                onClick={() => {
+                  window.open(`/labels?ids=${labelIds.join(',')}&copies=${labelCopies}&size=${labelSize}`, '_blank');
+                  setShowLabelModal(false);
+                }}
+                className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold py-2 rounded-lg cursor-pointer"
+              >
+                Open print view
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* OVERLAY H: Recycle Bin view */}
       <RecycleBinModal showRecycleBin={showRecycleBin} setShowRecycleBin={setShowRecycleBin} products={products} />

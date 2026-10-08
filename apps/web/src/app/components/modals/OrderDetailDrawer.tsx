@@ -2,7 +2,9 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw } from 'lucide-react';
+import { FileText, MessageCircle, Printer, RotateCcw } from 'lucide-react';
+import { useShop } from '../../ShopContext';
+import { openInvoice, openWhatsAppForBill } from '../../lib/share';
 
 interface OrderDetailDrawerProps {
   selectedOrder: any | null;
@@ -20,6 +22,7 @@ export default function OrderDetailDrawer({
   setOrderDetailLoading,
   startReturnFromOrder,
 }: OrderDetailDrawerProps) {
+  const { API_BASE, secureFetch } = useShop();
   return (
     <AnimatePresence>
       {(selectedOrder || orderDetailLoading) && (
@@ -170,6 +173,23 @@ export default function OrderDetailDrawer({
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div className="px-6 pt-4 border-t border-neutral-800 grid grid-cols-3 gap-2 text-[11px]">
+                  <button onClick={() => openInvoice(selectedOrder.id, 'receipt')} className="flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 py-2 rounded-lg cursor-pointer">
+                    <Printer className="w-3.5 h-3.5" /> Receipt
+                  </button>
+                  <button onClick={() => openInvoice(selectedOrder.id, 'a4')} className="flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 py-2 rounded-lg cursor-pointer">
+                    <FileText className="w-3.5 h-3.5" /> A4 invoice
+                  </button>
+                  <button
+                    onClick={() => openWhatsAppForBill(API_BASE, secureFetch, selectedOrder.id)}
+                    disabled={!selectedOrder.customer || selectedOrder.customer.phone === '0000000000'}
+                    title={selectedOrder.customer && selectedOrder.customer.phone !== '0000000000' ? 'Send on WhatsApp' : 'No customer phone on this bill'}
+                    className="flex items-center justify-center gap-1.5 bg-green-900/60 hover:bg-green-800 disabled:opacity-40 disabled:cursor-not-allowed text-green-200 py-2 rounded-lg cursor-pointer"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                  </button>
                 </div>
 
                 {!selectedOrder.isQuote && selectedOrder.status === 'FINALIZED' && (

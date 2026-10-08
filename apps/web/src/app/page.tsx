@@ -26,7 +26,9 @@ import CommandPalette from './components/modals/CommandPalette';
 import { ClosingSessionModal, ExpenseModal, OpeningSessionModal } from './components/modals/SessionModals';
 import AiSettingsModal from './components/modals/AiSettingsModal';
 import { API_BASE, ShopContext } from './ShopContext';
-import { getMockCustomers, getMockProducts } from './mockData';
+import OfflineBanner from './components/OfflineBanner';
+import BarcodeScanner from './components/BarcodeScanner';
+import { cacheGet, cacheSet, enqueueBill, isNetworkError, listQueuedBills, newClientRef, syncQueuedBills } from './lib/offline';
 import type { ActiveUser, CartItem, Category, Customer, PaymentMethod, Product, Supplier, TabId, Unit } from './types';
 
 // ==========================================
@@ -123,7 +125,14 @@ export default function ShopOSApp() {
   const [aiSettingsList, setAiSettingsList] = useState<any[]>([]);
 
   // Offline Sandbox Indicator
+  // "Sandbox" now means the server is unreachable: tabs skip their fetches and POS bills from the cache
   const [isSandboxMode, setIsSandboxMode] = useState(false);
+  // Full catalogue for POS search (all products, cached on the device for offline billing)
+  const [posCatalogue, setPosCatalogue] = useState<Product[]>([]);
+  const [catalogueCachedAt, setCatalogueCachedAt] = useState<string | null>(null);
+  const [queueVersion, setQueueVersion] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'connected' | 'offline'>('connected');
 
   // Input Focus Refs
@@ -190,7 +199,7 @@ export default function ShopOSApp() {
     setSelectedLedgerDetails(null);
 
     try {
-      const endpoint = type === 'CUSTOMER' 
+      const endpoint = type === 'CUSTOMER'
         ? `${API_BASE}/billing/customers/${id}/ledger`
         : `${API_BASE}/billing/suppliers/${id}/ledger`;
       const res = await secureFetch(endpoint);
@@ -353,20 +362,20 @@ export default function ShopOSApp() {
       // 1. Fetch products (limit to take=20 for performance)
       const prodRes = await secureFetch(`${API_BASE}/products?take=20`);
       if (prodRes.status === 401) return; // session expired, secureFetch already logged out
-      if (prodRes.ok) {
-        const prodData = await prodRes.json();
-        setProducts(prodData);
-        setBackendStatus('connected');
-      } else {
-        throw new Error('API server down');
-      }
+      if (!prodRes.ok) throw new Error(`Products request failed (${prodRes.status})`);
+      setProducts(await prodRes.json());
+      setBackendStatus('connected');
+      setIsSandboxMode(false);
 
       // 2. Fetch customers
       const custRes = await secureFetch(`${API_BASE}/billing/customers`);
       if (custRes.ok) {
         const custData = await custRes.json();
         setCustomers(custData);
+        cacheSet('customers', custData);
       }
+
+      await loadPosCatalogue();
 
       // 3. Fetch lookup lists used by product forms
       const [catRes, unitRes, supRes] = await Promise.all([
@@ -382,14 +391,57 @@ export default function ShopOSApp() {
       await fetchExpenses();
       await fetchReminders();
     } catch (e) {
-      console.warn('Backend offline, running in sandbox mode with static mock data.');
-      setBackendStatus('offline');
-      setIsSandboxMode(true);
-      // Load mock items
-      setProducts(getMockProducts());
-      setCustomers(getMockCustomers());
+      if (isNetworkError(e)) await goOffline();
+      else console.error('Loading shop data failed:', e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Every product (paged 100 at a time) for POS search, saved on the device for offline billing
+  const loadPosCatalogue = async () => {
+    const all: Product[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 50; page++) {
+      const res = await secureFetch(`${API_BASE}/products?take=100${cursor ? `&cursor=${cursor}` : ''}`);
+      if (!res.ok) return;
+      const batch: Product[] = await res.json();
+      all.push(...batch);
+      if (batch.length < 100) break;
+      cursor = batch[batch.length - 1].id;
+    }
+    setPosCatalogue(all);
+    setCatalogueCachedAt(new Date().toISOString());
+    cacheSet('catalogue', all);
+  };
+
+  const goOffline = async () => {
+    setBackendStatus('offline');
+    setIsSandboxMode(true);
+    const [catalogue, cachedCustomers] = await Promise.all([cacheGet<Product[]>('catalogue'), cacheGet<Customer[]>('customers')]);
+    if (catalogue) {
+      setPosCatalogue(catalogue.value);
+      setProducts(catalogue.value.slice(0, 20));
+      setCatalogueCachedAt(catalogue.updatedAt);
+    }
+    if (cachedCustomers) setCustomers(cachedCustomers.value);
+  };
+
+  const refreshQueue = () => setQueueVersion(v => v + 1);
+
+  // Sends bills saved offline; the server ignores repeats of the same clientRef
+  const runSync = async () => {
+    if ((await listQueuedBills()).length === 0) return;
+    setIsSyncing(true);
+    try {
+      const result = await syncQueuedBills(payload =>
+        secureFetch(`${API_BASE}/billing/bills`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+      );
+      if (result.offline) await goOffline();
+      if (result.synced > 0) loadPosCatalogue();
+    } finally {
+      setIsSyncing(false);
+      refreshQueue();
     }
   };
 
@@ -494,6 +546,51 @@ export default function ShopOSApp() {
     }
   }, [user]);
 
+  // Owners and managers get the assistant's morning brief once a day, the first time they open the app
+  useEffect(() => {
+    if (!user || (user.role !== 'OWNER' && user.role !== 'MANAGER')) return;
+    const today = new Date().toDateString();
+    try {
+      if (localStorage.getItem('shopos_brief_seen') === today) return;
+      localStorage.setItem('shopos_brief_seen', today);
+    } catch {
+      return;
+    }
+    setShowCopilot(true);
+  }, [user]);
+
+  // While offline, check every 10s whether the server is back; then reload data and sync saved bills
+  useEffect(() => {
+    if (!user || backendStatus !== 'offline') return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (res.ok) {
+          await fetchAllData();
+          runSync();
+        }
+      } catch {
+        // still offline
+      }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [user, backendStatus]);
+
+  // Online: retry saved bills periodically and as soon as the browser reports the network is back
+  useEffect(() => {
+    if (!user) return;
+    refreshQueue();
+    if (backendStatus !== 'connected') return;
+    runSync();
+    const timer = setInterval(runSync, 30000);
+    const onOnline = () => runSync();
+    window.addEventListener('online', onOnline);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [user, backendStatus]);
+
   useEffect(() => {
     if (user && activeTab === 'inventory') {
       fetchCatalogProducts();
@@ -515,14 +612,18 @@ export default function ShopOSApp() {
       setFilteredProducts([]);
       return;
     }
-    const q = productSearch.toLowerCase();
-    const matches = products.filter(p => 
-      p.name.toLowerCase().includes(q) || 
-      p.sku.toLowerCase().includes(q) || 
-      (p.barcode && p.barcode.includes(q))
+    const q = productSearch.trim().toLowerCase();
+    const source = posCatalogue.length ? posCatalogue : products;
+    const exact = source.filter(p => p.sku.toLowerCase() === q || p.barcode === productSearch.trim());
+    const matches = source.filter(p =>
+      !exact.includes(p) && (
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.barcode && p.barcode.includes(q))
+      )
     );
-    setFilteredProducts(matches.slice(0, 5));
-  }, [productSearch, products]);
+    setFilteredProducts([...exact, ...matches].slice(0, 8));
+  }, [productSearch, products, posCatalogue]);
 
   // Handle customer searches
   useEffect(() => {
@@ -531,8 +632,8 @@ export default function ShopOSApp() {
       return;
     }
     const q = customerSearch.toLowerCase();
-    const matches = customers.filter(c => 
-      c.name.toLowerCase().includes(q) || 
+    const matches = customers.filter(c =>
+      c.name.toLowerCase().includes(q) ||
       c.phone.includes(q)
     );
     setFilteredCustomers(matches.slice(0, 5));
@@ -651,7 +752,7 @@ export default function ShopOSApp() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cart, products, selectedCustomer, activeTab]);
+  }, [cart, products, selectedCustomer, activeTab, isCommandPaletteOpen, commandPaletteIndex, commandPaletteSearch, user]);
 
   // ==========================================
   // Login Functions
@@ -684,30 +785,11 @@ export default function ShopOSApp() {
         setAuthError(errData.message || 'Incorrect password.');
       }
     } catch (err) {
-      console.warn('API Authentication server connection failed. Launching client sandbox session.');
-      // Auto bypass for easy evaluation
-      setUser({
-        userId: 'dev-bypass-id',
-        username: loginForm.username,
-        fullName: loginForm.username === 'manager' ? 'Ramesh Manager (Local)' : 'Anil Cashier (Local)',
-        role: loginForm.username === 'manager' ? 'MANAGER' : 'CASHIER',
-      });
-      setIsSandboxMode(true);
-      setBackendStatus('offline');
+      // Signing in needs the server; a device that was already signed in keeps working offline
+      setAuthError("Can't reach the ShopOS server. Check that it is running and try again.");
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleQuickBypass = () => {
-    setUser({
-      userId: 'bypass-id',
-      username: 'cashier',
-      fullName: 'Anil Cashier (Local Sandbox)',
-      role: 'CASHIER',
-    });
-    setIsSandboxMode(true);
-    setBackendStatus('offline');
   };
 
   const handleLogout = () => {
@@ -728,9 +810,33 @@ export default function ShopOSApp() {
   // POS Billing Logic
   // ==========================================
 
+  // Enter in the POS search: exact barcode/SKU wins (hardware scanners type the code then Enter), else the top match
+  const handleSearchEnter = () => {
+    const code = productSearch.trim();
+    if (!code) return;
+    const source = posCatalogue.length ? posCatalogue : products;
+    const exact = source.find(p => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase());
+    const pick = exact || filteredProducts[0];
+    if (pick) addToCart(pick);
+  };
+
+  const handleScannedCode = async (code: string) => {
+    let product = (posCatalogue.length ? posCatalogue : products).find(p => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase());
+    if (!product && backendStatus === 'connected') {
+      const res = await secureFetch(`${API_BASE}/products?search=${encodeURIComponent(code)}&take=5`);
+      if (res.ok) product = (await res.json() as Product[]).find(p => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase());
+    }
+    if (product) {
+      setActiveTab('pos');
+      addProductToCart(product, 1);
+    } else {
+      alert(`No product has barcode ${code}. Add it from Products & Stock, or set the barcode on the product.`);
+    }
+  };
+
   const addToCart = (product: Product) => {
     const price = product.level2Price;
-    
+
     // Check if already in cart
     const existingIndex = cart.findIndex(item => item.product.id === product.id);
     if (existingIndex > -1) {
@@ -747,7 +853,7 @@ export default function ShopOSApp() {
       const itemTaxable = price;
       const cgst = (itemTaxable * product.cgstRate) / 100;
       const sgst = (itemTaxable * product.sgstRate) / 100;
-      
+
       const newCartItem: CartItem = {
         product,
         quantity: 1,
@@ -813,7 +919,7 @@ export default function ShopOSApp() {
     let subtotal = 0;
     let cgst = 0;
     let sgst = 0;
-    
+
     cart.forEach(item => {
       const taxable = Math.max(0, (item.unitPrice - item.discount) * item.quantity);
       subtotal += taxable;
@@ -824,7 +930,7 @@ export default function ShopOSApp() {
     const taxAmount = cgst + sgst;
     const preDiscountTotal = subtotal + taxAmount;
     const netAmount = Math.max(0, preDiscountTotal - overallDiscount);
-    
+
     return {
       subtotal,
       taxAmount,
@@ -1010,11 +1116,22 @@ export default function ShopOSApp() {
   };
 
   const executeCheckout = async (approvedByManagerId?: string, bypassLossWarning?: boolean) => {
+    const offline = backendStatus === 'offline';
+    const needsApproval = cart.some(item => (item.unitPrice - item.discount) < item.product.level3Price) && !approvedByManagerId && user?.role !== 'OWNER';
+    if (offline && (paymentMethod === 'CREDIT' || needsApproval)) {
+      alert(paymentMethod === 'CREDIT'
+        ? 'Credit sales need the server to check the credit limit. Take cash, UPI or card, or wait until the connection is back.'
+        : 'Prices below the minimum need approval, which needs the server. Use a normal price or wait until the connection is back.');
+      return;
+    }
     setIsCheckingOut(true);
-    
+
     const actualPaid = paymentMethod === 'CASH' ? Number(paidAmount) : totals.netAmount;
+    // Same key for every attempt, so a retried or later-synced bill is never recorded twice
+    const clientRef = newClientRef();
     const payload = {
       billData: {
+        clientRef,
         customerId: selectedCustomer?.id || null,
         items: cart.map(i => ({
           productId: i.product.id,
@@ -1032,32 +1149,40 @@ export default function ShopOSApp() {
       userId: user?.userId,
     };
 
-    if (isSandboxMode) {
-      setTimeout(() => {
-        const invoiceNum = isQuote ? `QTE-${Date.now().toString().slice(-6)}` : `BILL-${Date.now().toString().slice(-6)}`;
-        setCheckoutResult({
-          billNumber: invoiceNum,
-          netAmount: totals.netAmount,
-          paidAmount: actualPaid,
-          changeAmount: Math.max(0, actualPaid - totals.netAmount),
-          isQuote,
+    // Saves the bill on this device and updates the local stock picture until it syncs
+    const saveOffline = async (soldCart: CartItem[]) => {
+      await enqueueBill(payload, { total: totals.netAmount, items: soldCart.length, customer: selectedCustomer?.name });
+      if (!isQuote) {
+        const sold = new Map(soldCart.map(i => [i.product.id, i.quantity]));
+        const adjust = (list: Product[]) => list.map(p => sold.has(p.id) && p.stockLevels[0]
+          ? { ...p, stockLevels: [{ ...p.stockLevels[0], quantity: Math.max(0, p.stockLevels[0].quantity - sold.get(p.id)!) }, ...p.stockLevels.slice(1)] }
+          : p);
+        setPosCatalogue(prev => {
+          const next = adjust(prev);
+          cacheSet('catalogue', next);
+          return next;
         });
-        
-        if (!isQuote) {
-          const updatedProds = products.map(p => {
-            const cartItem = cart.find(ci => ci.product.id === p.id);
-            if (cartItem) {
-              const updatedInv = [...p.stockLevels];
-              updatedInv[0].quantity = Math.max(0, updatedInv[0].quantity - cartItem.quantity);
-              return { ...p, stockLevels: updatedInv };
-            }
-            return p;
-          });
-          setProducts(updatedProds);
-        }
+        setProducts(prev => adjust(prev));
+      }
+      setCheckoutResult({
+        billNumber: `OFFLINE-${clientRef.slice(-6).toUpperCase()}`,
+        netAmount: totals.netAmount,
+        paidAmount: actualPaid,
+        changeAmount: Math.max(0, actualPaid - totals.netAmount),
+        isQuote,
+        offline: true,
+      });
+      refreshQueue();
+    };
 
-        setIsCheckingOut(false);
-      }, 800);
+    if (offline) {
+      const soldCart = [...cart];
+      await saveOffline(soldCart);
+      setCart([]);
+      setSelectedCustomer(null);
+      setOverallDiscount(0);
+      setPaidAmount('0');
+      setIsCheckingOut(false);
       return;
     }
 
@@ -1101,13 +1226,16 @@ export default function ShopOSApp() {
           setCheckoutResult(null);
         } else {
           setCheckoutResult({
+            id: order.id,
             billNumber: order.billNumber,
             netAmount: order.netAmount,
             paidAmount: order.paidAmount,
             changeAmount: Math.max(0, order.paidAmount - order.netAmount),
             isQuote: order.isQuote,
+            customerPhone: savedCustomer && savedCustomer.phone !== '0000000000' ? savedCustomer.phone : null,
           });
           fetchCatalogProducts();
+          loadPosCatalogue();
         }
       } else {
         const err = await res.json();
@@ -1123,7 +1251,11 @@ export default function ShopOSApp() {
         }
       }
     } catch (err) {
-      if (!requiresApproval) {
+      if (!requiresApproval && isNetworkError(err) && paymentMethod !== 'CREDIT') {
+        // Connection dropped mid-checkout: keep the sale, sync it later with the same clientRef
+        await saveOffline(savedCart);
+        await goOffline();
+      } else if (!requiresApproval) {
         alert('Network error during checkout. Reverting cart.');
         setCart(savedCart);
         setSelectedCustomer(savedCustomer);
@@ -1143,7 +1275,7 @@ export default function ShopOSApp() {
   // ==========================================
 
   if (!user) {
-    return <LoginScreen authError={authError} isLoading={isLoading} onLogin={handleLoginSubmit} handleQuickBypass={handleQuickBypass} />;
+    return <LoginScreen authError={authError} isLoading={isLoading} onLogin={handleLoginSubmit} />;
   }
 
   // ==========================================
@@ -1171,10 +1303,20 @@ export default function ShopOSApp() {
 
         {/* 2. Main Content Frame */}
         <main className="flex-1 flex flex-col min-w-0 bg-neutral-950 relative">
+          <OfflineBanner
+            offline={backendStatus === 'offline'}
+            queueVersion={queueVersion}
+            syncing={isSyncing}
+            onSyncNow={runSync}
+            catalogueCachedAt={catalogueCachedAt}
+          />
+          <BarcodeScanner open={showScanner} onClose={() => setShowScanner(false)} onDetected={handleScannedCode} />
           <AnimatePresence mode="wait">
             {activeTab === 'pos' && (
               <PosTab
                 key="pos"
+                onSearchEnter={handleSearchEnter}
+                onOpenScanner={() => setShowScanner(true)}
                 cart={cart}
                 totals={totals}
                 setProducts={setProducts}
@@ -1365,7 +1507,7 @@ export default function ShopOSApp() {
         />
 
         {/* Floating AI Assistant Trigger Button */}
-        {!showCopilot && <button 
+        {!showCopilot && <button
           type="button"
           onClick={() => setShowCopilot(true)}
           className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-gradient-to-tr from-violet-600 to-blue-500 shadow-lg shadow-violet-500/20 flex items-center justify-center text-white z-40 hover:scale-105 transition-transform cursor-pointer"

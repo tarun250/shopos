@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CheckCircle, PlusCircle, RefreshCw, Search, ShoppingCart, TrendingDown } from 'lucide-react';
+import { Camera, CheckCircle, PlusCircle, RefreshCw, Search, ShoppingCart, TrendingDown } from 'lucide-react';
 import TabPane from './TabPane';
 import AddCustomerModal, { AddCustomerForm } from '../modals/AddCustomerModal';
 import QuickProductModal, { QuickProductForm } from '../modals/QuickProductModal';
@@ -16,6 +16,8 @@ const getProductPrice = (product: Product, level: string): number => {
 // Cart, customer, search and payment state live in page.tsx because keyboard shortcuts
 // (F2, F4, Ctrl+F, Ctrl+Space, Escape) and the AI agent drive them too.
 interface PosTabProps {
+  onSearchEnter: () => void;
+  onOpenScanner: () => void;
   cart: CartItem[];
   totals: CartTotals;
   setProducts: (products: Product[]) => void;
@@ -54,6 +56,8 @@ interface PosTabProps {
 }
 
 export default function PosTab({
+  onSearchEnter,
+  onOpenScanner,
   cart,
   totals,
   setProducts,
@@ -115,12 +119,12 @@ export default function PosTab({
     <TabPane className="flex-1 flex overflow-hidden h-full">
       {/* Left Column: Cart Grid & Invoice Panel */}
       <div className="flex-1 flex flex-col min-w-0 h-full border-r border-neutral-800/80">
-        
+
         {/* Day Session Indicator Banner */}
         {!activeSession ? (
           <div className="bg-amber-600/10 border-b border-amber-500/25 p-3 flex justify-between items-center text-xs shrink-0 text-amber-400">
             <span>⚠️ Day Session is currently closed. Register opening cash to start billing.</span>
-            <button 
+            <button
               type="button"
               onClick={() => setShowOpeningModal(true)}
               className="bg-amber-600 hover:bg-amber-550 text-white font-semibold px-2.5 py-1 rounded transition-colors cursor-pointer"
@@ -134,14 +138,14 @@ export default function PosTab({
               <span>Shift: <span className="text-white font-semibold">{activeSession.openingUser}</span> • Active since {new Date(activeSession.openingTime).toLocaleTimeString()}</span>
             </div>
             <div className="flex gap-2">
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowExpenseModal(true)}
                 className="bg-neutral-850 hover:bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded border border-neutral-800 transition-colors cursor-pointer"
               >
                 Log Expense
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowClosingModal(true)}
                 className="bg-red-950/40 hover:bg-red-900/40 text-red-400 px-2 py-0.5 rounded border border-red-900/30 transition-colors cursor-pointer font-semibold"
@@ -156,20 +160,34 @@ export default function PosTab({
         <div className="p-4 border-b border-neutral-800 flex items-center gap-3 relative shrink-0">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-2.5 text-neutral-500 w-4.5 h-4.5" />
-            <input 
+            <input
               ref={productSearchRef}
               type="text"
               placeholder="Scan barcode, enter SKU, product name, or alias (Ctrl + Space)..."
               value={productSearch}
               onChange={e => setProductSearch(e.target.value)}
-              className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors font-mono"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onSearchEnter();
+                }
+              }}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-11 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors font-mono"
             />
+            <button
+              type="button"
+              onClick={onOpenScanner}
+              title="Scan with camera"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
 
             {/* Search Results Dropdown */}
             {filteredProducts.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl z-40 overflow-hidden py-1">
                 {filteredProducts.map((p, idx) => (
-                  <div 
+                  <div
                     key={p.id}
                     onClick={() => addToCart(p)}
                     className="flex items-center justify-between px-4 py-2 hover:bg-neutral-800/60 cursor-pointer transition-colors"
@@ -211,17 +229,17 @@ export default function PosTab({
           </div>
 
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={() => setIsQuote(prev => !prev)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
-                isQuote 
-                  ? 'bg-amber-600/20 text-amber-400 border-amber-500/50' 
+                isQuote
+                  ? 'bg-amber-600/20 text-amber-400 border-amber-500/50'
                   : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border-neutral-800'
               }`}
             >
               {isQuote ? 'Quote Mode Active' : 'Quote Mode (F4)'}
             </button>
-            <button 
+            <button
               onClick={clearCart}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-red-400 border border-neutral-800 transition-colors cursor-pointer"
             >
@@ -279,19 +297,19 @@ export default function PosTab({
                       </td>
                       <td className="py-3 text-center">
                         <div className="inline-flex items-center bg-neutral-900 border border-neutral-800 rounded-md">
-                          <button 
+                          <button
                             onClick={() => updateCartQty(idx, item.quantity - 1)}
                             className="px-2 py-0.5 text-xs text-neutral-500 hover:text-white"
                           >
                             -
                           </button>
-                          <input 
+                          <input
                             type="number"
                             value={item.quantity}
                             onChange={e => updateCartQty(idx, Number(e.target.value))}
                             className="w-10 bg-transparent text-center text-xs font-mono text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
-                          <button 
+                          <button
                             onClick={() => updateCartQty(idx, item.quantity + 1)}
                             className="px-2 py-0.5 text-xs text-neutral-500 hover:text-white"
                           >
@@ -300,7 +318,7 @@ export default function PosTab({
                         </div>
                       </td>
                       <td className="py-3 pr-2">
-                        <input 
+                        <input
                           type="number"
                           value={Number(sellPrice.toFixed(2)) || ''}
                           placeholder="0.00"
@@ -316,7 +334,7 @@ export default function PosTab({
                         ₹{item.totalPrice.toFixed(2)}
                       </td>
                       <td className="py-3 text-center">
-                        <button 
+                        <button
                           onClick={() => removeFromCart(idx)}
                           className="text-neutral-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                         >
@@ -359,16 +377,16 @@ export default function PosTab({
       {/* Right Column: Customer Details & Checkout Splits */}
       <div className="w-80 flex flex-col h-full bg-neutral-900/10 p-5 shrink-0">
         <div className="flex-1 space-y-6">
-          
+
           {/* Section A: Customer Account Link */}
           <div>
             <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Customer Account</h3>
-            
+
             {!selectedCustomer ? (
               <div className="space-y-2">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 text-neutral-500 w-3.5 h-3.5" />
-                  <input 
+                  <input
                     ref={customerSearchRef}
                     type="text"
                     placeholder="Search customer by mobile..."
@@ -381,7 +399,7 @@ export default function PosTab({
                   {filteredCustomers.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl z-50 overflow-hidden">
                       {filteredCustomers.map(c => (
-                        <div 
+                        <div
                           key={c.id}
                           onClick={() => handleSelectCustomer(c)}
                           className="px-3 py-2 hover:bg-neutral-800 cursor-pointer flex justify-between items-center text-xs"
@@ -397,7 +415,7 @@ export default function PosTab({
                   )}
                 </div>
 
-                <button 
+                <button
                   onClick={() => setAddCustomer(prev => ({ ...prev, show: true }))}
                   className="w-full bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-xs py-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
@@ -412,7 +430,7 @@ export default function PosTab({
                     <p className="text-xs font-bold text-white">{selectedCustomer.name}</p>
                     <p className="text-[10px] text-neutral-500">{selectedCustomer.phone}</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setSelectedCustomer(null)}
                     className="text-[10px] text-neutral-400 hover:text-red-400 cursor-pointer"
                   >
@@ -441,15 +459,15 @@ export default function PosTab({
               {(['CASH', 'UPI', 'CARD', 'CREDIT'] as const).map(method => {
                 const isDisabled = method === 'CREDIT' && !selectedCustomer;
                 return (
-                  <button 
+                  <button
                     key={method}
                     disabled={isDisabled}
                     onClick={() => setPaymentMethod(method)}
                     className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors border text-center ${
-                      isDisabled 
+                      isDisabled
                         ? 'opacity-30 border-neutral-800 text-neutral-500 cursor-not-allowed'
-                        : paymentMethod === method 
-                          ? 'bg-violet-600 border-violet-500 text-white' 
+                        : paymentMethod === method
+                          ? 'bg-violet-600 border-violet-500 text-white'
                           : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
                     }`}
                   >
@@ -467,7 +485,7 @@ export default function PosTab({
                 <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-2">Customer Cash Handed Over</h3>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-neutral-500 text-xs font-mono">₹</span>
-                  <input 
+                  <input
                     type="number"
                     value={paidAmount}
                     onChange={e => setPaidAmount(e.target.value)}
@@ -478,13 +496,13 @@ export default function PosTab({
                 {/* Tender quick match suggestions */}
                 {cart.length > 0 && (
                   <div className="flex gap-1.5 mt-2">
-                    <button 
+                    <button
                       onClick={() => setPaidAmount(totals.netAmount.toFixed(0))}
                       className="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800/80 text-[10px] text-neutral-300 px-2 py-1 rounded transition-colors cursor-pointer"
                     >
                       Exact Cash
                     </button>
-                    <button 
+                    <button
                       onClick={() => setPaidAmount((Math.ceil(totals.netAmount / 100) * 100).toString())}
                       className="bg-neutral-900 hover:bg-neutral-800 border border-neutral-800/80 text-[10px] text-neutral-300 px-2 py-1 rounded transition-colors cursor-pointer"
                     >
@@ -511,7 +529,7 @@ export default function PosTab({
           const isCash = paymentMethod === 'CASH';
           const isInsufficient = isCash && (isNaN(cashValue) || cashValue < totals.netAmount);
           const isEmptyCash = isCash && (!paidAmount || cashValue === 0);
-          
+
           let buttonText = isQuote ? 'Save Quotation' : 'Complete Payment (F2)';
           let isBtnDisabled = cart.length === 0 || isCheckingOut;
 
@@ -526,7 +544,7 @@ export default function PosTab({
           }
 
           return (
-            <button 
+            <button
               onClick={handlePOSCheckout}
               disabled={isBtnDisabled}
               className="w-full bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 mt-4 shadow-lg shadow-violet-600/10"

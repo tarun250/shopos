@@ -13,10 +13,9 @@ interface LoginScreenProps {
   authError: string;
   isLoading: boolean;
   onLogin: (form: LoginForm) => void;
-  handleQuickBypass: () => void;
 }
 
-export default function LoginScreen({ authError, isLoading, onLogin, handleQuickBypass }: LoginScreenProps) {
+export default function LoginScreen({ authError, isLoading, onLogin }: LoginScreenProps) {
   const [loginForm, setLoginForm] = useState<LoginForm>({ username: 'cashier', password: 'cashier123' });
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -83,18 +82,6 @@ export default function LoginScreen({ authError, isLoading, onLogin, handleQuick
           </button>
         </form>
 
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-neutral-800"></div></div>
-          <div className="relative flex justify-center text-xs uppercase"><span className="bg-neutral-900 px-2 text-neutral-500">Developer Sandbox</span></div>
-        </div>
-
-        <button 
-          type="button"
-          onClick={handleQuickBypass}
-          className="w-full bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm py-2 rounded-lg transition-colors cursor-pointer border border-neutral-700/50"
-        >
-          Launch Offline Mock POS
-        </button>
 
         <div className="mt-6 text-center text-xs text-neutral-500">
           <p>Seeded accounts: <strong className="text-neutral-300">cashier</strong> (3333) | <strong className="text-neutral-300">manager</strong> (2222)</p>
