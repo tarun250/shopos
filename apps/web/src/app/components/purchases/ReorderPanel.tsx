@@ -142,7 +142,8 @@ export default function ReorderPanel({ open, onClose, onCreatePo, refreshKey, co
                           <p className="text-[10px] text-neutral-500">
                             {g.items.length} product{g.items.length === 1 ? '' : 's'}
                             {urgentCount > 0 && <span className="text-red-400"> · {urgentCount} at or below minimum</span>}
-                            {' · '}est. {inr(Math.round(est * 100) / 100)} before GST
+                            {/* Cost prices are owner-only, so managers get no estimate */}
+                            {est > 0 && <>{' · '}est. {inr(Math.round(est * 100) / 100)} before GST</>}
                           </p>
                           {!g.supplier && <p className="text-[10px] text-amber-400 mt-0.5">You will pick the supplier in the purchase order.</p>}
                         </div>

@@ -21,8 +21,8 @@ export class ReportsController {
   }
 
   @Get('reorder')
-  reorder(@Query('leadDays') leadDays?: string, @Query('coverDays') coverDays?: string) {
+  reorder(@Req() req: any, @Query('leadDays') leadDays?: string, @Query('coverDays') coverDays?: string) {
     const clamp = (v: string | undefined, d: number) => Math.min(Math.max(Number(v) || d, 1), 90);
-    return this.reports.reorder(clamp(leadDays, 7), clamp(coverDays, 14));
+    return this.reports.reorder(clamp(leadDays, 7), clamp(coverDays, 14), req.user.role);
   }
 }

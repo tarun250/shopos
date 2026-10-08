@@ -65,11 +65,14 @@ describe('agent tools (database)', () => {
 
   it('create_purchase_order with receiveNow adds stock only after execute', async () => {
     const stockBefore = (await client.stockLevel.findFirst({ where: { productId: shop.bulb9.id } }))!.quantity;
-    const preview = await createPurchaseOrder.prepare({ supplier: 'Havells', items: [{ product: 'LED-9W', quantity: 20 }], receiveNow: true, amountPaid: 500 }, ctx('MANAGER'));
-    expect(preview.args.items[0].unitCost).toBe(75); // defaults to last cost
+    // Cost prices are owner-only, so a manager must give the supplier's rate
+    await expect(createPurchaseOrder.prepare({ supplier: 'Havells', items: [{ product: 'LED-9W', quantity: 20 }] }, ctx('MANAGER'))).rejects.toThrow(/Give the unit cost/);
+
+    const preview = await createPurchaseOrder.prepare({ supplier: 'Havells', items: [{ product: 'LED-9W', quantity: 20 }], receiveNow: true, amountPaid: 500 }, ctx('OWNER'));
+    expect(preview.args.items[0].unitCost).toBe(75); // owners default to the last cost
     expect((await client.stockLevel.findFirst({ where: { productId: shop.bulb9.id } }))!.quantity).toBe(stockBefore);
 
-    await createPurchaseOrder.execute(preview.args, ctx('MANAGER'));
+    await createPurchaseOrder.execute(preview.args, ctx('OWNER'));
     expect((await client.stockLevel.findFirst({ where: { productId: shop.bulb9.id } }))!.quantity).toBe(stockBefore + 20);
   });
 });

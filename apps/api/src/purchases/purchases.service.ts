@@ -28,7 +28,11 @@ export class PurchasesService {
     const take = Math.min(Math.max(filters.take || 25, 1), 100);
     const page = Math.max(filters.page || 1, 1);
     const where: any = {};
-    if (filters.status) where.status = filters.status;
+    if (filters.status) {
+      // Comma-separated list, e.g. "ORDERED,PARTIALLY_RECEIVED" for open orders
+      const statuses = filters.status.split(',').map(s => s.trim()).filter(Boolean);
+      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
+    }
     if (filters.supplierId) where.supplierId = filters.supplierId;
     if (filters.from || filters.to) {
       where.createdAt = { ...(filters.from ? { gte: new Date(filters.from) } : {}), ...(filters.to ? { lte: new Date(filters.to) } : {}) };
@@ -99,7 +103,8 @@ export class PurchasesService {
           cgstAmount: r2(cgst),
           sgstAmount: r2(sgst),
           netAmount: net,
-          balanceAmount: net,
+          // Nothing is owed until goods arrive; receive() adds what was delivered
+          balanceAmount: 0,
           status: 'ORDERED',
           supplierInvoiceNumber: input.supplierInvoiceNumber || null,
           expectedDate: input.expectedDate ? new Date(input.expectedDate) : null,
@@ -166,7 +171,8 @@ export class PurchasesService {
         data: { supplierId: po.supplierId, purchaseOrderId: po.id, transactionType: 'PURCHASE', credit: receivedValue, runningBalance: r2(balance) },
       });
 
-      const amountPaid = r2(Math.min(Math.max(input.amountPaid || 0, 0), po.balanceAmount));
+      // Can pay at most what is owed on this order once these goods are in
+      const amountPaid = r2(Math.min(Math.max(input.amountPaid || 0, 0), po.balanceAmount + receivedValue));
       if (amountPaid > 0) {
         balance -= amountPaid;
         await tx.supplierLedger.create({
@@ -184,7 +190,7 @@ export class PurchasesService {
           receivedAt: fullyReceived ? new Date() : po.receivedAt,
           supplierInvoiceNumber: input.supplierInvoiceNumber || po.supplierInvoiceNumber,
           paidAmount,
-          balanceAmount: r2(Math.max(0, po.netAmount - paidAmount)),
+          balanceAmount: r2(po.balanceAmount + receivedValue - amountPaid),
         },
         include: { items: true, supplier: true },
       });

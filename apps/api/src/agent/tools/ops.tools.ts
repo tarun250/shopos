@@ -188,10 +188,10 @@ export const reorderSuggestions: ReadTool = {
   description: 'What to reorder and how much, from the last 30 days of sales, current stock and open purchase orders, grouped by supplier.',
   schema: z.object({}),
   async execute(_args, ctx) {
-    const r = await ctx.reports.reorder();
+    const r = await ctx.reports.reorder(7, 14, ctx.user.role);
     return r.bySupplier.map(g => ({
       supplier: g.supplier?.name || 'No supplier set',
-      estimatedCost: g.estimatedCost,
+      ...('estimatedCost' in g ? { estimatedCost: (g as any).estimatedCost } : {}),
       items: g.items.map(i => ({ product: i.name, stock: i.stock, minStock: i.minStock, soldLast30Days: i.soldLast30Days, onOrder: i.onOrder, suggestedQuantity: i.suggestedQuantity, urgent: i.urgent })),
     }));
   },
@@ -218,10 +218,13 @@ export const createPurchaseOrder: WriteTool = {
     for (const item of args.items) {
       const p: any = await resolveProduct(ctx, item.product);
       if (lines.some(l => l.productId === p.id)) throw new ToolUserError(`${p.name} is listed twice; combine the quantities.`);
+      const isOwner = ctx.user.role === 'OWNER';
       const lastCost = p.stockLevels[0]?.costPrice || 0;
+      // Cost prices are owner-only: managers must state the supplier's rate themselves
+      if (item.unitCost === undefined && !isOwner) throw new ToolUserError(`Give the unit cost for ${p.name} from the supplier's rate or invoice.`);
       const unitCost = item.unitCost ?? lastCost;
       if (!unitCost) throw new ToolUserError(`No previous cost for ${p.name}; give a unit cost.`);
-      if (lastCost && Math.abs(unitCost - lastCost) / lastCost > 0.15) warnings.push(`${p.name}: cost ${inr(unitCost)} differs from the last cost ${inr(lastCost)} by more than 15%.`);
+      if (isOwner && lastCost && Math.abs(unitCost - lastCost) / lastCost > 0.15) warnings.push(`${p.name}: cost ${inr(unitCost)} differs from the last cost ${inr(lastCost)} by more than 15%.`);
       if (unitCost >= p.level3Price) warnings.push(`${p.name}: cost ${inr(unitCost)} is at or above the minimum selling price ${inr(p.level3Price)}; consider updating prices.`);
       const lineNet = r2(item.quantity * unitCost * (1 + (p.cgstRate + p.sgstRate) / 100));
       net += lineNet;

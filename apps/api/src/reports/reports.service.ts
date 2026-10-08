@@ -209,7 +209,7 @@ export class ReportsService {
    * Reorder suggestions from the last 30 days of sales:
    * suggested = average daily sales × (lead time + cover days) + minimum stock − stock − already on order.
    */
-  async reorder(leadDays = 7, coverDays = 14) {
+  async reorder(leadDays = 7, coverDays = 14, role = 'OWNER') {
     const db = this.prisma.client;
     const since = new Date(Date.now() - 30 * DAY_MS);
     const [products, sales, openLines] = await Promise.all([
@@ -259,6 +259,15 @@ export class ReportsService {
       group.items.push(r);
       group.estimatedCost = r2(group.estimatedCost + r.suggestedQuantity * r.lastCost);
       bySupplier.set(key, group);
+    }
+    // Cost prices are owner-only everywhere else, so hide them here too
+    if (role !== 'OWNER') {
+      const strip = (r: (typeof rows)[number]) => { const { lastCost, ...rest } = r; return rest; };
+      return {
+        leadDays, coverDays,
+        items: rows.map(strip),
+        bySupplier: [...bySupplier.values()].map(g => ({ supplier: g.supplier, items: g.items.map(strip) })),
+      };
     }
     return { leadDays, coverDays, items: rows, bySupplier: [...bySupplier.values()] };
   }

@@ -24,6 +24,7 @@ describe('Purchasing, reorder and user management (database)', () => {
       poId = po.id;
       expect(po.status).toBe('ORDERED');
       expect(po.netAmount).toBe(10030); // 8,500 + 18% GST
+      expect(po.balanceAmount).toBe(0); // nothing owed until goods arrive
       expect(Number(second.poNumber.slice(-4))).toBe(Number(po.poNumber.slice(-4)) + 1);
     });
 
@@ -33,6 +34,7 @@ describe('Purchasing, reorder and user management (database)', () => {
       const supplier = await client.supplier.findUnique({ where: { id: shop.supplier.id } });
 
       expect(po.status).toBe('PARTIALLY_RECEIVED');
+      expect(po.balanceAmount).toBe(4012);
       expect(stock!.quantity).toBe(140);
       expect(stock!.costPrice).toBeCloseTo((100 * 95 + 40 * 85) / 140, 2);
       expect(supplier!.balance).toBe(4012); // 40 × 85 × 1.18
@@ -47,6 +49,7 @@ describe('Purchasing, reorder and user management (database)', () => {
       const supplier = await client.supplier.findUnique({ where: { id: shop.supplier.id } });
       expect(po.status).toBe('RECEIVED');
       expect(po.paidAmount).toBe(5000);
+      expect(po.balanceAmount).toBe(5030);
       expect(supplier!.balance).toBe(10030 - 5000);
       await expect(purchases.cancel(poId, shop.manager.id)).rejects.toThrow(/cannot be cancelled/);
     });
